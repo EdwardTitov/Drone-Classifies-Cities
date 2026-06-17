@@ -2,5 +2,6 @@
 
 deeplake==3.9.52
 keras==3.12.0
+numpy==2.4.6
 sklearn==0.0.post12
 tensorflow==2.20.0
