@@ -211,8 +211,7 @@ kmeans_model = MiniBatchKMeans(n_clusters=14)
 ### Batch Sizes
 
 ```python
-BATCH_SIZE = 32
-BATCH_SIZE_CLUSTER = 64
+BATCH_SIZE = 128
 ```
 
 ### Optimizer
