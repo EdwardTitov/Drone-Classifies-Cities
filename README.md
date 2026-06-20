@@ -1,11 +1,11 @@
-# China City Classification and Object Counting with TensorFlow
+# China City Classification and Multi-Task Object Counting with TensorFlow
 
 ## Overview
 
 This project implements a **multi-task deep learning pipeline** using TensorFlow and Keras. The model simultaneously performs:
 
-1. **City Classification** – Predicts the city associated with an aerial image.
-2. **Object Counting** – Estimates the number of humans and cars present in the image.
+1. **City Classification** – Predicts the city cluster associated with an aerial image.
+2. **Object Counting** – Estimates the number of humans and vehicles present in the image.
 
 The system uses transfer learning with **MobileNetV2** and combines clustering techniques (PCA + MiniBatch K-Means) to generate city labels from extracted image features.
 
@@ -17,11 +17,12 @@ The project is built around the **VisDrone dataset** loaded through Deep Lake.
 
 * Multi-head neural network architecture
 * Transfer learning with pretrained MobileNetV2
-* Human and vehicle counting from aerial imagery
+* Human and multi-vehicle counting from aerial imagery
 * Automatic city label generation using:
 
   * PCA dimensionality reduction
   * MiniBatch K-Means clustering
+* Feature fusion between count predictions and city classification
 * TensorFlow data pipelines for efficient training
 * Cosine learning-rate scheduling
 * Support for training, validation, and testing datasets
@@ -59,11 +60,24 @@ requirements.txt
 Predicts:
 
 * Human count
-* Car count
+* Vehicle count
+
+Human categories include:
+
+* Pedestrian
+* People
+
+Vehicle categories include:
+
+* Car
+* Van
+* Truck
+* Bus
+* Motorcycle
 
 #### 2. City Classification Head
 
-Predicts one of 14 city categories:
+Predicts one of 14 cluster-based city categories generated through PCA and MiniBatch K-Means:
 
 * Tianjin
 * Hong Kong
@@ -80,6 +94,10 @@ Predicts one of 14 city categories:
 * Suzhou
 * Xuzhou
 
+### Feature Fusion
+
+The city classification branch incorporates predicted object counts as additional features. Count predictions are passed through `tf.stop_gradient()` before being concatenated with image features, preventing gradients from flowing back into the counting head.
+
 ---
 
 ## Prerequisites
@@ -94,8 +112,8 @@ Predicts one of 14 city categories:
 ### Clone the repository
 
 ```bash
-git clone https://github.com/your-username/china-city-classification.git
-cd china-city-classification
+git clone https://github.com/<your-username>/<repository-name>.git
+cd <repository-name>
 ```
 
 ### Create a virtual environment
@@ -181,11 +199,11 @@ city_predictions, count_predictions = model.predict(images)
 
 Images are:
 
-1. Resized to `224 × 224`
+1. Resized to `224 × 407`
 2. Normalized using MobileNetV2 preprocessing
 
 ```python
-image = tf.image.resize(image, (224, 224))
+image = tf.image.resize(image, (224, 407))
 image = keras.applications.mobilenet_v2.preprocess_input(image)
 ```
 
@@ -208,10 +226,10 @@ kmeans_model = MiniBatchKMeans(n_clusters=14)
 
 ## Training Configuration
 
-### Batch Sizes
+### Batch Size
 
 ```python
-BATCH_SIZE = 128
+BATCH_SIZE = 16
 ```
 
 ### Optimizer
@@ -222,7 +240,7 @@ BATCH_SIZE = 128
 ### Loss Functions
 
 * Sparse Categorical Crossentropy for city classification
-* Regression loss for object counting
+* Huber loss for object counting
 
 ---
 
