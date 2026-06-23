@@ -1,31 +1,32 @@
-# China City Classification and Multi-Task Object Counting with TensorFlow
+# China City Classification and Scene Density Estimation with TensorFlow
 
 ## Overview
 
-This project implements a **multi-task deep learning pipeline** using TensorFlow and Keras. The model simultaneously performs:
+This project implements a **multi-task deep learning pipeline** using TensorFlow and Keras for aerial scene understanding on the **VisDrone dataset**.
 
-1. **City Classification** – Predicts the city cluster associated with an aerial image.
-2. **Object Counting** – Estimates the number of humans and vehicles present in the image.
+The model simultaneously performs:
 
-The system uses transfer learning with **MobileNetV2** and combines clustering techniques (PCA + MiniBatch K-Means) to generate city labels from extracted image features.
+1. **City Classification** – predicts cluster-based city labels generated through unsupervised learning.
+2. **Scene Density Estimation** – predicts human and vehicle density levels from aerial imagery.
 
-The project is built around the **VisDrone dataset** loaded through Deep Lake.
+Instead of relying on manually labeled city annotations, the project generates pseudo-labels using **MobileNetV2 feature extraction**, **PCA dimensionality reduction**, and **MiniBatch K-Means clustering**.
+
+The architecture leverages scene density information as contextual cues for improving city classification performance.
 
 ---
 
 ## Features
 
-* Multi-head neural network architecture
-* Transfer learning with pretrained MobileNetV2
-* Human and multi-vehicle counting from aerial imagery
-* Automatic city label generation using:
-
-  * PCA dimensionality reduction
-  * MiniBatch K-Means clustering
-* Feature fusion between count predictions and city classification
-* TensorFlow data pipelines for efficient training
-* Cosine learning-rate scheduling
-* Support for training, validation, and testing datasets
+- Multi-task deep learning architecture
+- Transfer learning with ImageNet-pretrained MobileNetV2
+- Human and vehicle scene density estimation
+- Automatic city label generation using PCA + MiniBatch K-Means
+- Feature fusion between density predictions and city classification
+- Gradient isolation using `tf.stop_gradient()`
+- Efficient TensorFlow data pipelines
+- Cosine learning-rate scheduling
+- CPU-friendly training
+- Support for train, validation, and test datasets
 
 ---
 
@@ -37,8 +38,8 @@ requirements.txt
 │
 ├── Dataset Loading
 ├── Image Preprocessing
-├── Detection Preprocessing
-├── City Label Generation (PCA + K-Means)
+├── Density Preprocessing
+├── City Label Generation (PCA + MiniBatch K-Means)
 ├── TensorFlow Pipelines
 ├── Multi-Head Model Definition
 └── Training Configuration
@@ -50,105 +51,84 @@ requirements.txt
 
 ### Shared Backbone
 
-* MobileNetV2 (ImageNet pretrained)
-* Frozen feature extractor
+- MobileNetV2 (ImageNet pretrained)
+- Frozen feature extractor
+- Input resolution: **224 × 407**
 
-### Output Heads
-
-#### 1. Count Head
+### Density Head
 
 Predicts:
 
-* Human count
-* Vehicle count
+- Human density
+- Vehicle density
 
-Human categories include:
+Human categories:
 
-* Pedestrian
-* People
+- Pedestrian
+- People
 
-Vehicle categories include:
+Vehicle categories:
 
-* Car
-* Van
-* Truck
-* Bus
-* Motorcycle
+- Car
+- Van
+- Truck
+- Bus
+- Motorcycle
 
-#### 2. City Classification Head
+To stabilize training and reduce the influence of extreme crowd counts, density targets are transformed using:
 
-Predicts one of 14 cluster-based city categories generated through PCA and MiniBatch K-Means:
+```python
+counts_vector = tf.math.log1p(counts_vector)
+```
 
-* Tianjin
-* Hong Kong
-* Daqing
-* Ganzhou
-* Guangzhou
-* Jinchang
-* Liuzhou
-* Nanjing
-* Shaoxing
-* Shenyang
-* Nanyang
-* Zhangjiakou
-* Suzhou
-* Xuzhou
-
-### Feature Fusion
-
-The city classification branch incorporates predicted object counts as additional features. Count predictions are passed through `tf.stop_gradient()` before being concatenated with image features, preventing gradients from flowing back into the counting head.
+This allows the network to learn scene density rather than exact object counts.
 
 ---
 
-## Prerequisites
+### City Classification Head
 
-* Python 3.9 or later
-* pip package manager
+Predicts one of **14 cluster-based city categories** generated through PCA and MiniBatch K-Means:
+
+- Tianjin
+- Hong Kong
+- Daqing
+- Ganzhou
+- Guangzhou
+- Jinchang
+- Liuzhou
+- Nanjing
+- Shaoxing
+- Shenyang
+- Nanyang
+- Zhangjiakou
+- Suzhou
+- Xuzhou
+
+The classification branch incorporates density predictions as additional contextual information.
+
+```python
+protected_counts = tf.stop_gradient(count_output)
+```
+
+This prevents classification gradients from interfering with density learning.
 
 ---
 
-## Installation
+## Feature Fusion
 
-### Clone the repository
+The model combines:
 
-```bash
-git clone https://github.com/<your-username>/<repository-name>.git
-cd <repository-name>
-```
+1. Global image features extracted from MobileNetV2.
+2. Predicted human density.
+3. Predicted vehicle density.
 
-### Create a virtual environment
-
-```bash
-python -m venv venv
-```
-
-Activate it:
-
-**Windows**
-
-```bash
-venv\Scripts\activate
-```
-
-**Linux / macOS**
-
-```bash
-source venv/bin/activate
-```
-
-### Install dependencies
-
-All required packages are listed in `requirements.txt`.
-
-```bash
-pip install -r requirements.txt
-```
+These features are concatenated before the final city classification layers, enabling the model to use scene activity information when distinguishing between city clusters.
 
 ---
 
 ## Dataset
 
-The project uses the VisDrone dataset through Deep Lake:
+The project uses the **VisDrone dataset** loaded through Deep Lake:
 
 ```python
 train_ds = dl.load("hub://activeloop/visdrone-det-train")
@@ -158,48 +138,11 @@ test_ds = dl.load("hub://activeloop/visdrone-det-test-dev")
 
 ---
 
-## Usage
-
-### Load Required Libraries
-
-```python
-import tensorflow as tf
-import tensorflow.keras as keras
-from keras import layers
-import deeplake as dl
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.decomposition import PCA
-```
-
-### Build the Model
-
-```python
-model = build_multi_head_model()
-```
-
-### Train the Model
-
-```python
-model.fit(
-    train_pipeline,
-    validation_data=val_pipeline,
-    epochs=EPOCHS
-)
-```
-
-### Run Predictions
-
-```python
-city_predictions, count_predictions = model.predict(images)
-```
-
----
-
 ## Image Preprocessing
 
 Images are:
 
-1. Resized to `224 × 407`
+1. Resized to **224 × 407**
 2. Normalized using MobileNetV2 preprocessing
 
 ```python
@@ -209,17 +152,25 @@ image = keras.applications.mobilenet_v2.preprocess_input(image)
 
 ---
 
-## Clustering Pipeline
+## City Label Generation Pipeline
 
-City labels are generated by:
+City labels are generated automatically by:
 
-1. Extracting features using MobileNetV2
-2. Reducing dimensionality with PCA
-3. Applying MiniBatch K-Means clustering
+1. Extracting MobileNetV2 features
+2. Applying Global Average Pooling
+3. Reducing dimensions with PCA
 
 ```python
-pca_model = PCA(n_components=50)
-kmeans_model = MiniBatchKMeans(n_clusters=14)
+PCA(n_components=50)
+```
+
+4. Clustering features using MiniBatch K-Means
+
+```python
+MiniBatchKMeans(
+    n_clusters=14,
+    batch_size=1024
+)
 ```
 
 ---
@@ -234,39 +185,71 @@ BATCH_SIZE = 16
 
 ### Optimizer
 
-* Adam optimizer
-* CosineDecay learning rate scheduler
+- Adam optimizer
+- CosineDecay learning-rate scheduler
 
 ### Loss Functions
 
-* Sparse Categorical Crossentropy for city classification
-* Huber loss for object counting
+#### City Classification
+
+```python
+SparseCategoricalCrossentropy
+```
+
+#### Scene Density Estimation
+
+```python
+Huber Loss
+```
+
+---
+
+## Results
+
+Final evaluation metrics:
+
+```text
+city_output_accuracy: 0.8441
+city_output_loss:     0.3893
+
+count_output_loss:    0.4361
+count_output_mae:     0.8057
+
+total_loss:           0.6376
+```
+
+### Performance Summary
+
+- **City Classification Accuracy:** **84.41%**
+- **Human/Vehicle Density MAE:** **0.81**
+- Stable multi-task training
+- Successful integration of density cues into classification
 
 ---
 
 ## Technologies Used
 
-* TensorFlow
-* Keras
-* MobileNetV2
-* Deep Lake
-* Scikit-learn
-
-  * PCA
-  * MiniBatch K-Means
+- TensorFlow
+- Keras
+- MobileNetV2
+- Deep Lake
+- Scikit-learn
+  - PCA
+  - MiniBatch K-Means
 
 ---
 
 ## Future Improvements
 
-* Fine-tune the MobileNetV2 backbone
-* Add more object categories
-* Introduce data augmentation
-* Export the model for deployment
-* Evaluate with additional metrics
+- Fine-tune the MobileNetV2 backbone
+- Add data augmentation
+- Incorporate additional object categories
+- Explore attention mechanisms
+- Export the model for deployment
+- Evaluate with additional metrics
 
 ---
 
 ## License
 
-This project is provided for educational and research purposes via the MIT License.
+This project is provided for educational and research purposes under the **MIT License**.
